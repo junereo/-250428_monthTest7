@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Increment</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+</head>
+<body>
+    <div class="container">
+        <h1>Counter</h1>
+  
+        <div class="input-group">
+          <input type="text" id="address" placeholder="컨트랙트 주소를 입력하세요">
+          <button onclick="walletConnect()">연결</button>
+          <button onclick="getCount()">카운터 조회</button>
+          <button onclick="increment()">카운터 증가</button>
+          <button onclick="reset()">리셋</button>
+        </div>
+        <div class="result" id="result">결과가 여기에 표시됩니당</div>
+      </div>
+      <script>
+        let web3;
+        if(typeof window.ethereum !== "undefined") {
+          web3 = new Web3(window.ethereum);
+        } else {
+  
+          alert("Metamask가 설치되어 있지 않습니다.")
+        }
+  
+        const loadABI = async() => {
+          const { data } = await axios.get("./Counter_sol_Counter.abi");
+          return data
+        }
+  
+        const walletConnect = async() => {
+          const resultDiv = document.getElementById("result");
+          const response =  await axios.get("./CA.txt");
+          const contractAddress = response.data.trim();
+          document.querySelector("#address").value = contractAddress;
+
+          try {
+            const accounts = await window.ethereum.request({
+              method: "eth_requestAccounts"
+            })
+  
+            const address = accounts[0];
+            resultDiv.innerHTML = `연결 성공: ${address}`;
+          } catch (error) {
+            resultDiv.innerHTML = `연결 실패: ${error.message}`;
+          }
+        }
+        const getCount = async() => {
+          await window.ethereum.request({ method: "eth_requestAccounts" });
+          const contractAddress = document.querySelector("#address").value;
+          const resultDiv = document.querySelector("#result");
+  
+          if(!contractAddress) {
+            resultDiv.innerHTML = "컨트랙트 주소가 없습니다.";
+            return;
+          }
+  
+          try {
+              const abi = await loadABI();
+              const contract = new web3.eth.Contract(abi, contractAddress);
+              const count = await contract.methods.getCount().call();
+              resultDiv.innerHTML = `현재 카운트: ${count}`;
+          } catch (error) {
+            resultDiv.innerHTML = `에러 발생: ${error.message}`;
+          }
+        }
+  
+        const increment = async() => {
+          await window.ethereum.request({ method: "eth_requestAccounts" });
+          const contractAddress = document.querySelector("#address").value;
+          const resultDiv = document.querySelector("#result");
+          
+          if(!contractAddress) {
+            resultDiv.innerHTML = "컨트랙트 주소가 없습니다.";
+          }
+          
+          try {
+            const abi = await loadABI();
+            const contract = new web3.eth.Contract(abi, contractAddress);
+            const tx = await contract.methods.increment().send({ from: window.ethereum.selectedAddress });
+            resultDiv.innerHTML = `카운터 증가가 되었음! 트랜잭션 해시: ${tx.transactionHash}`
+
+          } catch (error) {
+            console.log(error);
+            resultDiv.innerHTML = `에러 발생: ${error.message}`;
+          }
+        }
+  
+        const reset = async() => {
+          const contractAddress = document.querySelector("#address").value
+          const resultDiv = document.querySelector("#result")
+          
+          try {
+            await window.ethereum.request({ method: "eth_requestAccounts"});
+            const account = window.ethereum.selectedAddress
+            const abi = await loadABI();
+            const contract = new web3.eth.Contract(abi, contractAddress);
+            
+            console.log(`트랜잭션 날리는 중....`);
+            const estimateGas = await contract.methods.reset().estimateGas({ from : account });
+            const gasPrice = await web3.eth.getGasPrice();
+            const adjustedGasPrice = BigInt(gasPrice) * BigInt(12) / BigInt(10) // 1.2배로 내겠다!
+            const nonce = await web3.eth.getTransactionCount(account);
+  
+            const tx = await contract.methods.reset().send({
+              from: account,
+              to: contractAddress,
+              gas: estimateGas,
+              gasPrice: adjustedGasPrice,
+              nonce,
+              data: await contract.methods.reset().encodeABI(),
+              chainId: "11155111"
+            })
+  
+            console.log(`카운터 초기화! ${tx.transactionHash}`);  
+          } catch (error) {
+            console.log(error);
+            resultDiv.innerHTML = `에러 발생: ${error.message}`;
+          }
+        }
+      </script>
+</body>
+</html>
